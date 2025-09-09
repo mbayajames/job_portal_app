@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "686052989460",
+    "firebase_url": "https://jobportalapp-92d76-default-rtdb.firebaseio.com",
+    "project_id": "jobportalapp-92d76",
+    "storage_bucket": "jobportalapp-92d76.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:686052989460:android:e231d01387d63711186501",
+        "android_client_info": {
+          "package_name": "com.example.job_portal_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzgtzjB4QgQ8MSBHD_t8nB7ZYgmyP2byo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:686052989460:android:1ca04f2335947f42186501",
+        "android_client_info": {
+          "package_name": "jobportalapp.com"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzgtzjB4QgQ8MSBHD_t8nB7ZYgmyP2byo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
