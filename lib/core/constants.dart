@@ -36,3 +36,6 @@ const kBodyStyle = TextStyle(
 // User Roles
 const String kJobSeekerRole = "Job Seeker";
 const String kEmployerRole = "Employer";
+
+// App Name
+const String appName = "Job Portal App";
