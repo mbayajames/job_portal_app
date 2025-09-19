@@ -39,3 +39,8 @@ const String kEmployerRole = "Employer";
 
 // App Name
 const String appName = "Job Portal App";
+
+// Additional colors for consistency
+const primaryBlue = kPrimaryColor;
+const primaryWhite = Colors.white;
+const primaryBlack = Colors.black;
