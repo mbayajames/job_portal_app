@@ -1,0 +1,46 @@
+import 'package:flutter/material.dart';
+import 'login_screen.dart';
+import 'register_screen.dart';
+import 'forgot_password_screen.dart';
+
+class AuthFlow extends StatefulWidget {
+  const AuthFlow({super.key});
+
+  @override
+  State<AuthFlow> createState() => _AuthFlowState();
+}
+
+class _AuthFlowState extends State<AuthFlow> {
+  final PageController _controller = PageController(initialPage: 0);
+
+  void _goToPage(int index) {
+    _controller.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: PageView(
+        controller: _controller,
+        physics: const NeverScrollableScrollPhysics(), // controlled by buttons
+        children: [
+          LoginScreen(
+            onRegisterTap: () => _goToPage(1),
+            onForgotPasswordTap: () => _goToPage(2),
+          ),
+          RegisterScreen(
+            onLoginTap: () => _goToPage(0),
+          ),
+          ForgotPasswordScreen(
+            onLoginTap: () => _goToPage(0),
+          ),
+        ],
+      ),
+    );
+  }
+}
