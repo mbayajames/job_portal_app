@@ -1,14 +1,13 @@
 {
   "project_info": {
-    "project_number": "686052989460",
-    "firebase_url": "https://jobportalapp-92d76-default-rtdb.firebaseio.com",
-    "project_id": "jobportalapp-92d76",
-    "storage_bucket": "jobportalapp-92d76.firebasestorage.app"
+    "project_number": "760039732529",
+    "project_id": "jobportalapp-34abb",
+    "storage_bucket": "jobportalapp-34abb.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:686052989460:android:e231d01387d63711186501",
+        "mobilesdk_app_id": "1:760039732529:android:a12d0e764e08bccaf32c10",
         "android_client_info": {
           "package_name": "com.example.job_portal_app"
         }
@@ -16,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAzgtzjB4QgQ8MSBHD_t8nB7ZYgmyP2byo"
+          "current_key": "AIzaSyDe6lbOuXWwm93KFVIJ3mW4yMFFd0IPWX4"
         }
       ],
       "services": {
@@ -27,15 +26,15 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:686052989460:android:1ca04f2335947f42186501",
+        "mobilesdk_app_id": "1:760039732529:android:b811116159d6c665f32c10",
         "android_client_info": {
-          "package_name": "jobportalapp.com"
+          "package_name": "com.jamesmuthiora.jobportalapp"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAzgtzjB4QgQ8MSBHD_t8nB7ZYgmyP2byo"
+          "current_key": "AIzaSyDe6lbOuXWwm93KFVIJ3mW4yMFFd0IPWX4"
         }
       ],
       "services": {
