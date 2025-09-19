@@ -17,20 +17,11 @@ class Navbar extends StatelessWidget implements PreferredSizeWidget {
 
     if (role == 'seeker') {
       menuItems = [
-        {'title': 'Home', 'route': Routes.home},
-        {'title': 'Applications', 'route': Routes.applications},
-        {'title': 'Profile', 'route': Routes.profile},
+        {'title': 'Home', 'route': Routes.seekerHome},
       ];
     } else if (role == 'employer') {
       menuItems = [
         {'title': 'Dashboard', 'route': Routes.dashboard},
-        {'title': 'Post Job', 'route': Routes.postJob},
-        {'title': 'Applicants', 'route': Routes.applicants},
-      ];
-    } else if (role == 'admin') {
-      menuItems = [
-        {'title': 'Manage Users', 'route': Routes.manageUsers},
-        {'title': 'Manage Jobs', 'route': Routes.manageJobs},
       ];
     }
 
@@ -89,20 +80,11 @@ class RoleBasedDrawer extends StatelessWidget {
 
     if (role == 'seeker') {
       menuItems = [
-        {'title': 'Home', 'route': Routes.home},
-        {'title': 'Applications', 'route': Routes.applications},
-        {'title': 'Profile', 'route': Routes.profile},
+        {'title': 'Home', 'route': Routes.seekerHome},
       ];
     } else if (role == 'employer') {
       menuItems = [
         {'title': 'Dashboard', 'route': Routes.dashboard},
-        {'title': 'Post Job', 'route': Routes.postJob},
-        {'title': 'Applicants', 'route': Routes.applicants},
-      ];
-    } else if (role == 'admin') {
-      menuItems = [
-        {'title': 'Manage Users', 'route': Routes.manageUsers},
-        {'title': 'Manage Jobs', 'route': Routes.manageJobs},
       ];
     }
 
