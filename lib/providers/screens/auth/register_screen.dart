@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter_vector_icons/flutter_vector_icons.dart';
-import 'package:job_portal_app/core/constants.dart';
-import 'package:job_portal_app/core/routes.dart';
-import 'package:job_portal_app/services/auth_service.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:provider/provider.dart';
+import '../../../core/route_names.dart';
+import '../../../providers/auth_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -11,224 +14,326 @@ class RegisterScreen extends StatefulWidget {
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
-  String _role = kJobSeekerRole;
-  bool _loading = false;
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
-  final AuthService _authService = AuthService();
+  String _role = 'seeker';
+  XFile? _profileImage;
+
+  late AnimationController _animationController;
+  late Animation<double> _fadeInAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 800));
+    _fadeInAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeIn);
+    _animationController.forward();
+  }
 
   @override
   void dispose() {
+    _animationController.dispose();
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _nameController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+        maxHeight: 500,
+        maxWidth: 500,
+      );
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        if (bytes.length > 2 * 1024 * 1024) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Image size must be less than 2MB')),
+          );
+          return;
+        }
+        setState(() => _profileImage = picked);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick image: $e')),
+      );
+    }
+  }
+
+  Future<String?> _uploadProfileImage(String uid) async {
+    try {
+      if (_profileImage == null) return null;
+      final ref = FirebaseStorage.instance.ref().child('profiles/$uid.jpg');
+      if (kIsWeb) {
+        final bytes = await _profileImage!.readAsBytes();
+        await ref.putData(bytes);
+      } else {
+        await ref.putFile(File(_profileImage!.path));
+      }
+      return await ref.getDownloadURL();
+    } catch (e) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to upload image: $e')),
+      );
+      return null;
+    }
   }
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _loading = true);
+    if (_passwordController.text != _confirmPasswordController.text) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match')),
+      );
+      return;
+    }
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     try {
-      await _authService.register(
+      final userData = {
+        'name': _nameController.text.trim(),
+        'role': _role,
+      };
+      final success = await authProvider.signUp(
         _emailController.text.trim(),
         _passwordController.text.trim(),
-        _nameController.text.trim(),
-        _role,
+        userData,
       );
 
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Registration successful! Please log in.")),
-      );
-
-      Navigator.pushReplacementNamed(context, Routes.login);
+      if (success) {
+        final uid = authProvider.user!.uid;
+        if (_profileImage != null) {
+          final imageUrl = await _uploadProfileImage(uid);
+          if (imageUrl != null) {
+            await authProvider.updateProfile({'photoUrl': imageUrl});
+          }
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Registration successful! Verify email before login.'),
+          ),
+        );
+        Navigator.pushReplacementNamed(context, RouteNames.login);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authProvider.errorMessage ?? 'Registration failed.'),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
+        SnackBar(content: Text('Error: $e')),
       );
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final authProvider = Provider.of<AuthProvider>(context);
 
     return Scaffold(
-      backgroundColor: kBackgroundColor,
-      body: Center(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: const Text('Register'),
+        backgroundColor: Colors.blue.shade800,
+      ),
+      body: FadeTransition(
+        opacity: _fadeInAnimation,
         child: SingleChildScrollView(
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            width: size.width > 600 ? 420 : size.width * 0.9,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  Icon(
-                    MaterialCommunityIcons.account_plus,
-                    size: 65,
-                    color: kPrimaryColor,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "Create an Account",
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: kSecondaryColor,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Full Name
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      prefixIcon: Icon(MaterialIcons.person, color: kPrimaryColor),
-                      labelText: "Full Name",
-                      filled: true,
-                      fillColor: kLightColor,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    validator: (val) =>
-                        val == null || val.isEmpty ? "Enter your full name" : null,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Email
-                  TextFormField(
-                    controller: _emailController,
-                    decoration: InputDecoration(
-                      prefixIcon: Icon(MaterialIcons.email, color: kPrimaryColor),
-                      labelText: "Email",
-                      filled: true,
-                      fillColor: kLightColor,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    validator: (val) {
-                      if (val == null || val.isEmpty) return "Enter email";
-                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(val)) {
-                        return "Enter valid email";
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Password
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      prefixIcon: Icon(MaterialIcons.lock, color: kPrimaryColor),
-                      labelText: "Password",
-                      filled: true,
-                      fillColor: kLightColor,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    validator: (val) {
-                      if (val == null || val.isEmpty) return "Enter password";
-                      if (val.length < 6) return "Password must be at least 6 characters";
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Role selection
-                  DropdownButtonFormField<String>(
-                    initialValue: _role,
-                    items: const [
-                      DropdownMenuItem(
-                        value: kJobSeekerRole,
-                        child: Text("Job Seeker"),
-                      ),
-                      DropdownMenuItem(
-                        value: kEmployerRole,
-                        child: Text("Employer"),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      setState(() => _role = val!);
-                    },
-                    decoration: InputDecoration(
-                      prefixIcon: Icon(MaterialIcons.work, color: kPrimaryColor),
-                      labelText: "Select Role",
-                      filled: true,
-                      fillColor: kLightColor,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Register Button
-                  _loading
-                      ? const CircularProgressIndicator()
-                      : ElevatedButton.icon(
-                          icon: const Icon(Icons.person_add),
-                          onPressed: _register,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: kPrimaryColor,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(50),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          label: const Text("Register"),
-                        ),
-                  const SizedBox(height: 12),
-
-                  // Already have an account
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text("Already have an account?"),
-                      TextButton.icon(
-                        icon: const Icon(
-                          Feather.log_in,
-                          size: 18,
-                          color: kPrimaryColor,
-                        ),
-                        onPressed: () {
-                          Navigator.pushReplacementNamed(context, Routes.login);
-                        },
-                        label: const Text("Login"),
-                      ),
-                    ],
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Center(
+            child: Container(
+              width: isMobile ? double.infinity : 500,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 12,
+                    offset: Offset(0, 6),
                   ),
                 ],
               ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.blue.shade50,
+                        backgroundImage: _profileImage != null
+                            ? kIsWeb
+                                ? NetworkImage(_profileImage!.path)
+                                : FileImage(File(_profileImage!.path)) as ImageProvider
+                            : null,
+                        child: _profileImage == null
+                            ? const Icon(Icons.camera_alt, size: 40, color: Colors.blue)
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextField(
+                      _nameController,
+                      'Full Name',
+                      Icons.person,
+                      false,
+                      validator: (val) {
+                        if (val == null || val.isEmpty) {
+                          return 'Enter your full name';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTextField(
+                      _emailController,
+                      'Email',
+                      Icons.email,
+                      false,
+                      validator: (val) {
+                        if (val == null || val.isEmpty) {
+                          return 'Enter email';
+                        }
+                        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(val)) {
+                          return 'Enter a valid email';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTextField(
+                      _passwordController,
+                      'Password',
+                      Icons.lock,
+                      true,
+                      validator: (val) {
+                        if (val == null || val.isEmpty) {
+                          return 'Enter password';
+                        }
+                        if (val.length < 6) {
+                          return 'Password must be at least 6 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTextField(
+                      _confirmPasswordController,
+                      'Confirm Password',
+                      Icons.lock_outline,
+                      true,
+                      validator: (val) {
+                        if (val == null || val.isEmpty) {
+                          return 'Confirm your password';
+                        }
+                        if (val != _passwordController.text) {
+                          return 'Passwords do not match';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: _role,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.account_circle, color: Colors.blue),
+                        labelText: 'Role',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'seeker', child: Text('Job Seeker')),
+                        DropdownMenuItem(value: 'employer', child: Text('Employer')),
+                      ],
+                      onChanged: (val) => setState(() => _role = val!),
+                    ),
+                    const SizedBox(height: 20),
+                    authProvider.isLoading
+                        ? const Center(child: CircularProgressIndicator(color: Colors.blue))
+                        : ElevatedButton.icon(
+                            onPressed: _register,
+                            icon: const Icon(Icons.app_registration),
+                            label: const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 14),
+                              child: Text(
+                                'Register',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade800,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () => Navigator.pushReplacementNamed(context, RouteNames.login),
+                      icon: const Icon(Icons.login, color: Colors.blue),
+                      label: const Text(
+                        'Already have an account? Login',
+                        style: TextStyle(color: Colors.blue),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label,
+    IconData icon,
+    bool obscure, {
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscure,
+      validator: validator,
+      style: const TextStyle(color: Colors.black),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: Colors.blue),
+        filled: true,
+        fillColor: Colors.blue.shade50,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
         ),
       ),
     );
