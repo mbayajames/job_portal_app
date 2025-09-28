@@ -1,183 +1,157 @@
+// core/routes.dart
 import 'package:flutter/material.dart';
+import 'package:job_portal_app/providers/screens/employer/payment_screen.dart'; // Added
 
-// Auth Screens
+// 🔹 Core
+import 'route_names.dart';
+
+// 🔹 Models
+import '../models/job_model.dart';
+import '../models/application_model.dart';
+
+// 🔹 Auth Screens
 import '../providers/screens/auth/login_screen.dart';
 import '../providers/screens/auth/register_screen.dart';
-import '../providers/screens/auth/forgot_password.dart';
 
-// Job Seeker Screens
-import '../providers/screens/seeker/home_screen.dart' show HomeScreen;
-import '../providers/screens/seeker/profile_screen.dart';
-import '../providers/screens/seeker/notifications_screen.dart';
-import '../providers/screens/applicant/application_screen.dart';
-import '../providers/screens/applicant/preview_screen.dart';
+// 🔹 Job Seeker Screens
+import '../page/seeker/seeker_home_screen.dart';
+import '../page/seeker/applications_screen.dart';
+import '../page/seeker/application_details_screen.dart';
+import '../page/seeker/application_form_screen.dart';
+import '../page/seeker/profile_screen.dart';
+import '../page/seeker/account_settings_screen.dart';
+import '../page/seeker/saved_jobs_screen.dart';
+import '../page/seeker/interviews_screen.dart';
+import '../providers/screens/common/notifications_screen.dart';
 
-// Employer Screens
+// 🔹 Employer Screens
 import '../providers/screens/employer/dashboard_screen.dart';
 import '../providers/screens/employer/post_job_screen.dart';
+import '../providers/screens/employer/my_jobs_screen.dart';
 import '../providers/screens/employer/employer_applications_screen.dart';
-
-// Admin Screens
-import '../providers/screens/admin/manage_users_screen.dart';
-import '../providers/screens/admin/manage_jobs_screen.dart';
-
-// Route Names
-import '../core/route_names.dart';
+import '../providers/screens/employer/employer_profile_screen.dart';
+import '../providers/screens/employer/notifications_screen.dart';
+import '../providers/screens/employer/analytics_screen.dart';
 
 class Routes {
-  // Auth
-  static const String login = RouteNames.login;
-  static const String register = RouteNames.register;
-  static const String forgotPassword = RouteNames.forgotPassword;
-
-  // Job Seeker
-  static const String seekerHome = RouteNames.seekerHome;
-  static const String home = RouteNames.home;
-  static const String applications = RouteNames.applications;
-  static const String profile = RouteNames.profile;
-  static const String notifications = RouteNames.notifications;
-  static const String jobDetails = RouteNames.jobDetails;
-  static const String preview = RouteNames.preview;
-  static const String accountSettings = RouteNames.accountSettings;
-  static const String paymentHistory = RouteNames.paymentHistory;
-  static const String supportHelp = RouteNames.supportHelp;
-  static const String about = RouteNames.about;
-
-  // Employer
-  static const String dashboard = RouteNames.dashboard;
-  static const String postJob = RouteNames.postJob;
-  static const String applicants = RouteNames.applicants;
-
-  // Admin
-  static const String manageUsers = RouteNames.manageUsers;
-  static const String manageJobs = RouteNames.manageJobs;
-  static const String adminDashboard = RouteNames.adminDashboard;
-  static const String quickApply = RouteNames.quickApply;
-  static const String jobs = RouteNames.jobs;
-
   static Route<dynamic> generateRoute(RouteSettings settings) {
+    final args = settings.arguments;
+
     switch (settings.name) {
-      // Auth
-      case login:
+      // ================= INITIAL & AUTH =================
+      case RouteNames.login:
         return MaterialPageRoute(builder: (_) => const LoginScreen());
-      case register:
+      case RouteNames.register:
         return MaterialPageRoute(builder: (_) => const RegisterScreen());
-      case forgotPassword:
-        return MaterialPageRoute(builder: (_) => const ForgotPasswordScreen());
 
-      // Job Seeker
-      case seekerHome:
-      case home:
-        return MaterialPageRoute(builder: (_) => HomeScreen());
-      case applications:
-        final jobData = settings.arguments as Map<String, dynamic>?;
-        if (jobData != null) {
-          return MaterialPageRoute(builder: (_) => ApplicationScreen(jobData: jobData));
+      // ================= JOB SEEKER =================
+      case RouteNames.seekerHome:
+        return MaterialPageRoute(builder: (_) => const SeekerHomeScreen());
+      case RouteNames.applications:
+        return MaterialPageRoute(builder: (_) => const ApplicationsScreen());
+      case RouteNames.applicationDetails:
+        if (args is ApplicationDetailsArguments) {
+          return MaterialPageRoute(
+            builder: (_) => ApplicationDetailsScreen(
+              applicationId: args.applicationId,
+              jobTitle: args.jobTitle,
+            ),
+          );
+        } else if (args is Application) {
+          return MaterialPageRoute(
+            builder: (_) => ApplicationDetailsScreen(application: args),
+          );
+        } else if (args is String) {
+          return MaterialPageRoute(
+            builder: (_) => ApplicationDetailsScreen(applicationId: args),
+          );
         }
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Job data required for application")),
-          ),
-        );
-      case profile:
+        return _errorRoute(
+            "Invalid arguments for applicationDetails. Expected ApplicationDetailsArguments, Application, or String");
+      case RouteNames.applicationForm:
+        return _buildApplicationFormRoute(args);
+      case RouteNames.profile:
         return MaterialPageRoute(builder: (_) => const ProfileScreen());
-      case notifications:
-        return MaterialPageRoute(builder: (_) => const NotificationScreen());
-      case preview:
-        final args = settings.arguments as Map<String, dynamic>?;
-        if (args != null) {
-          return MaterialPageRoute(builder: (_) => PreviewScreen(
-            jobId: args['jobId'],
-            userData: args['userData'],
-            details: args['details'],
-            resumeUrl: args['resumeUrl'],
-            coverLetterUrl: args['coverLetterUrl'],
-            questionAnswers: args['questionAnswers'],
-          ));
-        }
+      case RouteNames.accountSettings:
+        return MaterialPageRoute(builder: (_) => const AccountSettingsScreen());
+      case RouteNames.savedJobs:
+        return MaterialPageRoute(builder: (_) => const SavedJobsScreen());
+      case RouteNames.notifications:
         return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Application data required")),
-          ),
-        );
-      case accountSettings:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Account Settings - Coming Soon")),
-          ),
-        );
-      case paymentHistory:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Payment History - Coming Soon")),
-          ),
-        );
-      case supportHelp:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Support & Help - Coming Soon")),
-          ),
-        );
-      case about:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("About - Coming Soon")),
-          ),
-        );
-      case jobDetails:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Job Details Screen - Coming Soon")),
-          ),
-        );
+            builder: (_) => const NotificationsScreen(role: "seeker"));
+      case RouteNames.interviews:
+        return MaterialPageRoute(builder: (_) => const InterviewsScreen());
 
-      // Employer
-      case dashboard:
+      // ================= EMPLOYER =================
+      case RouteNames.dashboard:
         return MaterialPageRoute(builder: (_) => const DashboardScreen());
-      case postJob:
-        return MaterialPageRoute(builder: (_) => PostJobScreen());
-      case applicants:
-        final jobId = settings.arguments as String?;
-        if (jobId != null) {
-          return MaterialPageRoute(builder: (_) => EmployerApplicationsScreen(jobId: jobId));
+      case RouteNames.postJob:
+        return MaterialPageRoute(builder: (_) => const PostJobScreen());
+      case RouteNames.myJobs:
+        return MaterialPageRoute(builder: (_) => const MyJobsScreen());
+      case RouteNames.applicants:
+        if (args is String) {
+          return MaterialPageRoute(
+            builder: (_) => EmployerApplicationsScreen(jobId: args),
+          );
+        } else {
+          return _errorRoute(
+              "Invalid arguments for applicants. Expected String");
         }
+      case RouteNames.employerProfile:
+        return MaterialPageRoute(builder: (_) => const EmployerProfileScreen());
+      case RouteNames.employerNotifications:
         return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Job ID required for applicants")),
-          ),
-        );
+            builder: (_) => const EmployerNotificationsScreen());
+      case RouteNames.paymentScreen: // Added
+        if (args is Map<String, dynamic>) {
+          return MaterialPageRoute(
+            builder: (_) => PaymentScreen(
+              jobData: args['jobData'] as Map<String, dynamic>,
+              onPaymentSuccess: args['onPaymentSuccess'] as VoidCallback,
+            ),
+          );
+        }
+        return _errorRoute(
+            "Invalid arguments for paymentScreen. Expected Map with jobData and onPaymentSuccess");
 
-      // Admin
-      case manageUsers:
-        return MaterialPageRoute(builder: (_) => const ManageUsersScreen());
-      case manageJobs:
-        return MaterialPageRoute(builder: (_) => const ManageJobsScreen());
-      case adminDashboard:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Admin Dashboard - Coming Soon")),
-          ),
-        );
-      case quickApply:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Quick Apply - Coming Soon")),
-          ),
-        );
-      case jobs:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Jobs - Coming Soon")),
-          ),
-        );
+      // ================= ANALYTICS =================
+      case RouteNames.employerAnalytics:
+        return MaterialPageRoute(builder: (_) => const AnalyticsScreen());
 
-      // Default
+      // ================= DEFAULT =================
       default:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text("Route not found")),
-          ),
-        );
+        return _errorRoute("Route not found: ${settings.name}");
     }
   }
+  static Route<dynamic> _errorRoute(String message) {
+    return MaterialPageRoute(
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: const Text('Error')),
+        body: Center(child: Text(message)),
+      ),
+    );
+  }
+
+  static Route<dynamic> _buildApplicationFormRoute(dynamic args) {
+    if (args is JobModel) {
+      return MaterialPageRoute(
+        builder: (_) => ApplicationFormScreen(job: args),
+      );
+    } else if (args is String) {
+      return MaterialPageRoute(
+        builder: (_) => ApplicationFormScreen(jobId: args),
+      );
+    } else {
+      return _errorRoute("Invalid arguments for applicationForm. Expected JobModel or String");
+    }
+  }
+  // ... (Rest of the file remains unchanged: _buildApplicationFormRoute, _createJobModelFromMap, _createJobModelFromObject, _getProperty, _parseDate, _errorRoute, CustomRouteGenerator, ApplicationDetailsArguments, ApplicationFormArguments, JobDetailsArguments, NavigationHelper)
+}
+
+class ApplicationDetailsArguments {
+  final String applicationId;
+  final String jobTitle;
+
+  ApplicationDetailsArguments({required this.applicationId, required this.jobTitle});
 }
