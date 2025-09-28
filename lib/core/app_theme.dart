@@ -10,9 +10,9 @@ class AppTheme {
       secondary: kSecondaryColor,
     ),
     textTheme: const TextTheme(
-      displayLarge: kHeadingStyle,
-      headlineSmall: kSubheadingStyle,
-      bodyMedium: kBodyStyle,
+      displayLarge: kHeadingStyleDark,
+      headlineSmall: kSubheadingStyleDark,
+      bodyMedium: kBodyStyleDark,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
