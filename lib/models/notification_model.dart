@@ -15,19 +15,19 @@ class NotificationModel {
     required this.timestamp,
   });
 
-  // Create NotificationModel from Firestore document
+  /// Create NotificationModel from Firestore DocumentSnapshot
   factory NotificationModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = doc.data() as Map<String, dynamic>? ?? {};
     return NotificationModel(
       id: doc.id,
-      title: data['title'] ?? '',
-      message: data['message'] ?? '',
-      read: data['read'] ?? false,
+      title: data['title'] as String? ?? '',
+      message: data['message'] as String? ?? '',
+      read: data['read'] as bool? ?? false,
       timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 
-  // Convert NotificationModel to Map for Firestore
+  /// Convert NotificationModel to Map for Firestore
   Map<String, dynamic> toMap() {
     return {
       'title': title,
@@ -37,7 +37,7 @@ class NotificationModel {
     };
   }
 
-  // Copy with updated fields (useful for marking read)
+  /// Copy with updated fields (useful for marking as read)
   NotificationModel copyWith({
     String? id,
     String? title,
