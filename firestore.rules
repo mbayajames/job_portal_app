@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -----------------------
+    // Users collection
+    // -----------------------
+    match /users/{userId} {
+      allow read, update, create: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
+      // Employers can read any user profile (for applications)
+      allow read: if request.auth != null;
+    }
+
+    // -----------------------
+    // Seekers collection
+    // -----------------------
+    match /seekers/{seekerId} {
+      allow read, update, create: if request.auth != null && request.auth.uid == seekerId;
+      allow delete: if false;
+      // Employers can read seeker profiles
+      allow read: if request.auth != null;
+    }
+
+    // -----------------------
+    // Employers collection
+    // -----------------------
+    match /employers/{employerId} {
+      allow read, update, create: if request.auth != null && request.auth.uid == employerId;
+      allow delete: if false;
+      // Seekers can read employer profiles
+      allow read: if request.auth != null;
+    }
+
+    // -----------------------
+    // Jobs collection
+    // -----------------------
+    match /jobs/{jobId} {
+      allow read: if request.auth != null; // Any authenticated user can read jobs
+      allow create: if request.auth != null && request.resource.data.employerId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.employerId == request.auth.uid
+                    || (request.auth != null && request.writeFields.hasOnly(['applicationCount']));
+      allow delete: if request.auth != null && resource.data.employerId == request.auth.uid;
+
+      // Questions subcollection
+      match /questions/{questionId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/jobs/$(jobId)).data.employerId;
+      }
+
+      // Applications subcollection (per job)
+      match /applications/{applicationId} {
+        allow create: if request.auth != null
+                      && request.resource.data.applicantId == request.auth.uid
+                      && request.resource.data.jobId == jobId
+                      && request.resource.data.status == "Applied";
+        allow read, update, delete: if request.auth != null && resource.data.applicantId == request.auth.uid;
+        // Employers can read/update applications for their jobs
+        allow read, update: if request.auth != null
+                            && request.auth.uid == get(/databases/$(database)/documents/jobs/$(jobId)).data.employerId;
+      }
+    }
+
+    // -----------------------
+    // Global applications collection
+    // -----------------------
+    match /applications/{applicationId} {
+      allow create: if request.auth != null
+                    && request.resource.data.applicantId == request.auth.uid
+                    && request.resource.data.jobId is string
+                    && request.resource.data.status == "Applied";
+      allow read, update, delete: if request.auth != null
+                                  && resource.data.applicantId == request.auth.uid;
+      // Employers can read/update applications for jobs they own
+      allow read, update: if request.auth != null
+                          && request.auth.uid == get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.employerId;
+    }
+
+    // -----------------------
+    // Saved Jobs collection
+    // -----------------------
+    match /saved_jobs/{savedJobId} {
+      allow read, write, create, delete: if request.auth != null 
+                                         && (resource.data.userId == request.auth.uid || request.resource.data.userId == request.auth.uid);
+    }
+
+    // -----------------------
+    // Notifications collection
+    // -----------------------
+    match /notifications/{notificationId} {
+      allow read, write, create, delete: if request.auth != null
+                                         && (resource.data.userId == request.auth.uid || request.resource.data.userId == request.auth.uid);
+    }
+
+    // -----------------------
+    // Payments collection
+    // -----------------------
+    match /payments/{paymentId} {
+      allow read, write, create, delete: if request.auth != null
+                                         && (resource.data.userId == request.auth.uid || request.resource.data.userId == request.auth.uid);
+    }
+
+    // -----------------------
+    // Support tickets collection
+    // -----------------------
+    match /support_tickets/{ticketId} {
+      allow read, write, create, delete: if request.auth != null
+                                         && (resource.data.userId == request.auth.uid || request.resource.data.userId == request.auth.uid);
+    }
+
+    // -----------------------
+    // Public app info
+    // -----------------------
+    match /app_info/info {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // -----------------------
+    // Admin collection
+    // -----------------------
+    match /admins/{adminId} {
+      allow read, write, create, delete: if request.auth != null && request.auth.uid == adminId;
+    }
+
+    // -----------------------
+    // Default fallback
+    // -----------------------
+    match /{document=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}
