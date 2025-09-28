@@ -8,56 +8,81 @@ class AuthProvider with ChangeNotifier {
 
   User? _user;
   Map<String, dynamic>? _userData;
-  String? role;
+  String? _role;
   bool isLoading = false;
   String? errorMessage;
 
-  // Valid roles
   static const List<String> _validRoles = ['seeker', 'employer', 'admin'];
+
+  /// User-specific job filters
+  Map<String, dynamic> _jobFilters = {};
+
+  /// User-specific saved jobs (IDs)
+  List<String> _savedJobIds = [];
 
   // Getters
   User? get user => _user;
+  String? get uid => _user?.uid;
+  String? get currentUserId => _user?.uid; // ✅ added
   Map<String, dynamic>? get currentUserData => _userData;
-  bool get isSeeker => role == 'seeker';
-  bool get isEmployer => role == 'employer';
-  bool get isAdmin => role == 'admin';
+  String? get userRole => _role;
+  bool get isLoggedIn => _user != null;
+  bool get isSeeker => _role == 'seeker';
+  bool get isEmployer => _role == 'employer';
+  bool get isAdmin => _role == 'admin';
+  Map<String, dynamic> get jobFilters => _jobFilters;
+  List<String> get savedJobIds => _savedJobIds;
 
   AuthProvider() {
-    _auth.authStateChanges().listen((user) async {
-      _user = user;
+    _listenToAuthChanges();
+  }
+
+  /// Listen to Firebase auth state changes
+  void _listenToAuthChanges() {
+    _auth.authStateChanges().listen((firebaseUser) async {
+      _user = firebaseUser;
       if (_user != null) {
-        await _fetchUserData(_user!.uid);
+        await _fetchUserData(currentUserId!);
       } else {
         _userData = null;
-        role = null;
+        _role = null;
+        _jobFilters = {};
+        _savedJobIds = [];
       }
       notifyListeners();
     });
   }
 
-  // Fetch user data from Firestore
+  /// Fetch user data from Firestore
   Future<void> _fetchUserData(String uid) async {
     try {
       final doc = await _firestore.collection('users').doc(uid).get();
       if (doc.exists) {
         _userData = doc.data();
-        role = _userData?['role']?.toLowerCase();
-        if (!_validRoles.contains(role)) {
-          role = 'seeker'; // Default to seeker if role is invalid
-          errorMessage = 'Invalid user role. Defaulted to seeker.';
+        _role = _userData?['role']?.toString().toLowerCase();
+        _jobFilters = _userData?['jobFilters'] ?? {};
+        _savedJobIds = List<String>.from(_userData?['savedJobs'] ?? []);
+        if (!_validRoles.contains(_role)) {
+          _role = 'seeker';
+          errorMessage = 'Invalid role found, defaulted to seeker.';
         }
       } else {
+        _userData = null;
+        _role = null;
+        _jobFilters = {};
+        _savedJobIds = [];
         errorMessage = 'User data not found.';
       }
     } catch (e) {
       _userData = null;
-      role = null;
+      _role = null;
+      _jobFilters = {};
+      _savedJobIds = [];
       errorMessage = 'Failed to fetch user data: $e';
     }
-    notifyListeners();
   }
 
-  // Sign in
+  /// Sign in user
   Future<bool> signIn(String email, String password) async {
     if (email.trim().isEmpty || password.trim().isEmpty) {
       errorMessage = 'Email and password cannot be empty.';
@@ -74,18 +99,15 @@ class AuthProvider with ChangeNotifier {
         email: email.trim(),
         password: password,
       );
-
       _user = credential.user;
 
       if (!(_user?.emailVerified ?? false)) {
-        await _auth.signOut();
-        errorMessage = 'Please verify your email. Check your inbox or spam folder.';
-        isLoading = false;
-        notifyListeners();
+        await signOut();
+        errorMessage = 'Please verify your email.';
         return false;
       }
 
-      await _fetchUserData(_user!.uid);
+      await _fetchUserData(currentUserId!);
       return true;
     } on FirebaseAuthException catch (e) {
       switch (e.code) {
@@ -99,28 +121,18 @@ class AuthProvider with ChangeNotifier {
           errorMessage = 'Invalid email format.';
           break;
         default:
-          errorMessage = e.message ?? 'Login failed. Please try again.';
+          errorMessage = e.message ?? 'Login failed.';
       }
+      return false;
+    } finally {
       isLoading = false;
       notifyListeners();
-      return false;
-    } catch (e) {
-      errorMessage = 'An unexpected error occurred: $e';
-      isLoading = false;
-      notifyListeners();
-      return false;
     }
   }
 
-  // Sign up
+  /// Sign up user
   Future<bool> signUp(
       String email, String password, Map<String, dynamic> userData) async {
-    if (email.trim().isEmpty || password.trim().isEmpty) {
-      errorMessage = 'Email and password cannot be empty.';
-      notifyListeners();
-      return false;
-    }
-
     final roleInput = userData['role']?.toString().toLowerCase();
     if (!_validRoles.contains(roleInput)) {
       errorMessage = 'Invalid role. Must be one of: ${_validRoles.join(", ")}';
@@ -139,19 +151,19 @@ class AuthProvider with ChangeNotifier {
       );
 
       _user = credential.user;
-      final uid = _user!.uid;
+      final uid = currentUserId!;
 
-      // Save user info in Firestore
       await _firestore.collection('users').doc(uid).set({
         ...userData,
         'role': roleInput,
+        'twoFactorEnabled': false,
+        'jobFilters': {},
+        'savedJobs': [],
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // Send email verification
       await _user!.sendEmailVerification();
-
       await _fetchUserData(uid);
       return true;
     } on FirebaseAuthException catch (e) {
@@ -166,11 +178,8 @@ class AuthProvider with ChangeNotifier {
           errorMessage = 'Invalid email format.';
           break;
         default:
-          errorMessage = e.message ?? 'Sign-up failed. Please try again.';
+          errorMessage = e.message ?? 'Sign-up failed.';
       }
-      return false;
-    } catch (e) {
-      errorMessage = 'An unexpected error occurred: $e';
       return false;
     } finally {
       isLoading = false;
@@ -178,24 +187,8 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Sign out
-  Future<void> signOut() async {
-    await _auth.signOut();
-    _user = null;
-    _userData = null;
-    role = null;
-    errorMessage = null;
-    notifyListeners();
-  }
-
-  // Send password reset email
-  Future<bool> sendPasswordReset({required String email}) async {
-    if (email.trim().isEmpty) {
-      errorMessage = 'Email cannot be empty.';
-      notifyListeners();
-      return false;
-    }
-
+  /// Send password reset email
+  Future<bool> sendPasswordReset(String email) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
@@ -204,19 +197,7 @@ class AuthProvider with ChangeNotifier {
       await _auth.sendPasswordResetEmail(email: email.trim());
       return true;
     } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'user-not-found':
-          errorMessage = 'No account found for this email.';
-          break;
-        case 'invalid-email':
-          errorMessage = 'Invalid email format.';
-          break;
-        default:
-          errorMessage = e.message ?? 'Failed to send password reset email.';
-      }
-      return false;
-    } catch (e) {
-      errorMessage = 'An unexpected error occurred: $e';
+      errorMessage = e.message ?? 'Failed to send password reset email.';
       return false;
     } finally {
       isLoading = false;
@@ -224,15 +205,29 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Update user profile
-  Future<bool> updateProfile(Map<String, dynamic> updates) async {
+  /// Sign out user
+  Future<void> signOut() async {
+    await _auth.signOut();
+    _user = null;
+    _userData = null;
+    _role = null;
+    _jobFilters = {};
+    _savedJobIds = [];
+    errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Update profile and optionally job filters / saved jobs
+  Future<bool> updateProfile(Map<String, dynamic> updates,
+      {Map<String, dynamic>? filters, List<String>? savedJobs}) async {
     if (_user == null) {
       errorMessage = 'No user is signed in.';
       notifyListeners();
       return false;
     }
 
-    if (updates.containsKey('role') && !_validRoles.contains(updates['role']?.toString().toLowerCase())) {
+    if (updates.containsKey('role') &&
+        !_validRoles.contains(updates['role']?.toString().toLowerCase())) {
       errorMessage = 'Invalid role. Must be one of: ${_validRoles.join(", ")}';
       notifyListeners();
       return false;
@@ -242,11 +237,14 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      await _firestore.collection('users').doc(_user!.uid).update({
+      final dataToUpdate = {
         ...updates,
+        if (filters != null) 'jobFilters': filters,
+        if (savedJobs != null) 'savedJobs': savedJobs,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
-      await _fetchUserData(_user!.uid);
+      };
+      await _firestore.collection('users').doc(currentUserId!).update(dataToUpdate);
+      await _fetchUserData(currentUserId!);
       return true;
     } catch (e) {
       errorMessage = 'Failed to update profile: $e';
@@ -257,11 +255,55 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Check email verification status
+  /// Save job
+  Future<void> saveJob(String jobId) async {
+    if (_user == null) return;
+    if (!_savedJobIds.contains(jobId)) {
+      _savedJobIds.add(jobId);
+      await _firestore.collection('users').doc(currentUserId!).update({
+        'savedJobs': _savedJobIds,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      notifyListeners();
+    }
+  }
+
+  /// Remove saved job
+  Future<void> removeSavedJob(String jobId) async {
+    if (_user == null) return;
+    _savedJobIds.remove(jobId);
+    await _firestore.collection('users').doc(currentUserId!).update({
+      'savedJobs': _savedJobIds,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    notifyListeners();
+  }
+
+  bool isJobSaved(String jobId) => _savedJobIds.contains(jobId);
+
+  /// Set job filters
+  void setJobFilters(Map<String, dynamic> filters) {
+    _jobFilters = filters;
+    notifyListeners();
+  }
+
+  void resetJobFilters() {
+    _jobFilters = {};
+    notifyListeners();
+  }
+
+  /// Check email verification
   Future<bool> checkEmailVerification() async {
     if (_user == null) return false;
     await _user!.reload();
     _user = _auth.currentUser;
     return _user?.emailVerified ?? false;
+  }
+
+  /// Load current user data
+  Future<void> loadCurrentUser() async {
+    if (_user != null) {
+      await _fetchUserData(_user!.uid);
+    }
   }
 }
