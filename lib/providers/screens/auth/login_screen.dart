@@ -56,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Login successful!')),
       );
-      final route = authProvider.isEmployer ? RouteNames.employerHome : RouteNames.seekerHome;
+      final route = authProvider.isEmployer ? RouteNames.dashboard : RouteNames.seekerHome;
       Navigator.pushReplacementNamed(context, route);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
