@@ -6,9 +6,14 @@ class ManageUsersScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Manage Users")),
+      appBar: AppBar(
+        title: const Text("Manage Users"),
+      ),
       body: const Center(
-        child: Text("Manage users here"),
+        child: Text(
+          "Here Admin can view, block, or delete users.",
+          style: TextStyle(fontSize: 16),
+        ),
       ),
     );
   }
