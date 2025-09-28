@@ -6,9 +6,14 @@ class ManageJobsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Manage Jobs")),
+      appBar: AppBar(
+        title: const Text("Manage Jobs"),
+      ),
       body: const Center(
-        child: Text("Manage jobs here"),
+        child: Text(
+          "Here Admin can review, approve, or remove job postings.",
+          style: TextStyle(fontSize: 16),
+        ),
       ),
     );
   }
