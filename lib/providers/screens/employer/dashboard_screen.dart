@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:vector_math/vector_math_64.dart' as vm;
+import 'package:vector_math/vector_math_64.dart' show Vector3;
 import '../../../core/route_names.dart';
 import './employer_applications_screen.dart';
 
@@ -34,11 +34,18 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<FlSpot> applicationSpots = [];
   List<BarChartGroupData> departmentData = [];
 
+  // Cache for user data to avoid repeated fetches
+  final Map<String, String> _userNameCache = {};
+  
+  // Firestore instances
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
   @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 800),
       vsync: this,
     );
     
@@ -70,79 +77,16 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
 
     try {
-      final currentUser = FirebaseAuth.instance.currentUser;
+      final currentUser = _auth.currentUser;
       if (currentUser == null) {
         throw 'User not authenticated';
       }
 
-      // Load employer profile
-      final employerDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .get();
-      
-      if (employerDoc.exists) {
-        employerData = employerDoc.data();
-      }
-
-      // Load jobs data
-      final jobsSnapshot = await FirebaseFirestore.instance
-          .collection('jobs')
-          .where('employerId', isEqualTo: currentUser.uid)
-          .get();
-      
-      totalJobs = jobsSnapshot.docs.length;
-
-      // Load applications data
-      List<Map<String, dynamic>> allApplications = [];
-      int activeCount = 0;
-      int hiredCount = 0;
-      
-      for (var jobDoc in jobsSnapshot.docs) {
-        final applicationsSnapshot = await FirebaseFirestore.instance
-            .collection('applications')
-            .where('jobId', isEqualTo: jobDoc.id)
-            .orderBy('appliedAt', descending: true)
-            .get();
-        
-        for (var appDoc in applicationsSnapshot.docs) {
-          final appData = appDoc.data();
-          appData['id'] = appDoc.id;
-          appData['jobTitle'] = jobDoc.data()['title'] ?? 'Unknown Job';
-          
-          // Get applicant name
-          try {
-            final userDoc = await FirebaseFirestore.instance
-                .collection('users')
-                .doc(appData['applicantId'])
-                .get();
-            if (userDoc.exists) {
-              appData['applicantName'] = userDoc.data()!['fullName'] ?? 'Unknown Applicant';
-            }
-          } catch (e) {
-            appData['applicantName'] = 'Unknown Applicant';
-          }
-          
-          allApplications.add(appData);
-          
-          final status = appData['status']?.toString().toLowerCase() ?? 'applied';
-          if (status == 'applied' || status == 'approved') {
-            activeCount++;
-          } else if (status == 'hired') {
-            hiredCount++;
-          }
-        }
-      }
-
-      totalApplications = allApplications.length;
-      activeCandidates = activeCount;
-      recentHires = hiredCount;
-
-      // Prepare recent activity (last 5 applications)
-      recentActivity = allApplications.take(5).toList();
-
-      // Generate chart data
-      _generateChartData(allApplications);
+      // Load all data in parallel using Future.wait
+      await Future.wait([
+        _loadEmployerProfile(currentUser.uid),
+        _loadJobsAndApplications(currentUser.uid),
+      ]);
 
       setState(() {
         isLoading = false;
@@ -155,6 +99,118 @@ class _DashboardScreenState extends State<DashboardScreen>
         error = e.toString();
         isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadEmployerProfile(String userId) async {
+    final employerDoc = await _firestore
+        .collection('users')
+        .doc(userId)
+        .get();
+    
+    if (employerDoc.exists) {
+      employerData = employerDoc.data();
+    }
+  }
+
+  Future<void> _loadJobsAndApplications(String userId) async {
+    // Load jobs data
+    final jobsSnapshot = await _firestore
+        .collection('jobs')
+        .where('employerId', isEqualTo: userId)
+        .get();
+    
+    totalJobs = jobsSnapshot.docs.length;
+
+    if (totalJobs == 0) {
+      // No jobs, set default values
+      totalApplications = 0;
+      activeCandidates = 0;
+      recentHires = 0;
+      recentActivity = [];
+      _generateChartData([]);
+      return;
+    }
+
+    // Load applications for all jobs in parallel
+    final applicationFutures = jobsSnapshot.docs.map((jobDoc) => 
+      _firestore
+          .collection('applications')
+          .where('jobId', isEqualTo: jobDoc.id)
+          .orderBy('appliedAt', descending: true)
+          .get()
+    ).toList();
+
+    final applicationsResults = await Future.wait(applicationFutures);
+
+    List<Map<String, dynamic>> allApplications = [];
+    int activeCount = 0;
+    int hiredCount = 0;
+
+    // Process applications and fetch user names in batches
+    final userFetchFutures = <Future<void>>[];
+
+    for (int i = 0; i < jobsSnapshot.docs.length; i++) {
+      final jobDoc = jobsSnapshot.docs[i];
+      final applicationsSnapshot = applicationsResults[i];
+      
+      for (var appDoc in applicationsSnapshot.docs) {
+        final appData = appDoc.data();
+        appData['id'] = appDoc.id;
+        appData['jobTitle'] = jobDoc.data()['title'] ?? 'Unknown Job';
+        
+        final applicantId = appData['applicantId'];
+        if (applicantId != null && !_userNameCache.containsKey(applicantId)) {
+          userFetchFutures.add(_fetchUserName(applicantId));
+        }
+        
+        allApplications.add(appData);
+        
+        final status = appData['status']?.toString().toLowerCase() ?? 'applied';
+        if (status == 'applied' || status == 'approved') {
+          activeCount++;
+        } else if (status == 'hired') {
+          hiredCount++;
+        }
+      }
+    }
+
+    // Wait for all user name fetches to complete
+    if (userFetchFutures.isNotEmpty) {
+      await Future.wait(userFetchFutures);
+    }
+
+    // Assign user names to applications
+    for (final app in allApplications) {
+      final applicantId = app['applicantId'];
+      app['applicantName'] = _userNameCache[applicantId] ?? 'Unknown Applicant';
+    }
+
+    totalApplications = allApplications.length;
+    activeCandidates = activeCount;
+    recentHires = hiredCount;
+
+    // Prepare recent activity (last 5 applications)
+    recentActivity = allApplications.take(5).toList();
+
+    // Generate chart data
+    _generateChartData(allApplications);
+  }
+
+  Future<void> _fetchUserName(String userId) async {
+    try {
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .get();
+      
+      if (userDoc.exists) {
+        _userNameCache[userId] = userDoc.data()!['fullName'] ?? 'Unknown Applicant';
+      } else {
+        _userNameCache[userId] = 'Unknown Applicant';
+      }
+    } catch (e) {
+      _userNameCache[userId] = 'Unknown Applicant';
     }
   }
 
@@ -199,6 +255,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   void _navigate(BuildContext context, String route, {dynamic arguments}) {
     Navigator.pushNamed(context, route, arguments: arguments);
   }
+  
 
   @override
   Widget build(BuildContext context) {
@@ -231,7 +288,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w400,
-              color: Colors.white.withValues(alpha: 230),
+              color: Colors.white.withValues(alpha: 0.9),
             ),
           ),
         ],
@@ -243,7 +300,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             icon: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 51),
+                color: Colors.white.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.notifications_outlined, size: 20),
@@ -260,7 +317,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 51),
+                color: Colors.white.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
                 image: employerData?['profilePicture']?.isNotEmpty == true
                     ? DecorationImage(
@@ -269,7 +326,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       )
                     : null,
               ),
-              child: employerData?['profilePicture']?.isEmpty != false
+              child: employerData?['profilePicture']?.isEmpty ?? true
                   ? const Icon(Icons.person, color: Colors.white, size: 18)
                   : null,
             ),
@@ -330,6 +387,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1a73e8),
+                foregroundColor: Colors.white,
               ),
             ),
           ],
@@ -344,22 +402,28 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: RefreshIndicator(
           onRefresh: _loadDashboardData,
           color: const Color(0xFF1a73e8),
-          child: SingleChildScrollView(
+          child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildOverviewSection(),
-                const SizedBox(height: 32),
-                _buildQuickActionsSection(context),
-                const SizedBox(height: 32),
-                _buildRecentActivitySection(),
-                const SizedBox(height: 32),
-                _buildAnalyticsSection(),
-                const SizedBox(height: 20),
-              ],
-            ),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildOverviewSection(),
+                      const SizedBox(height: 32),
+                      _buildQuickActionsSection(context),
+                      const SizedBox(height: 32),
+                      _buildRecentActivitySection(),
+                      const SizedBox(height: 32),
+                      _buildAnalyticsSection(),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -443,7 +507,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 15),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -511,7 +575,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 15),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -605,7 +669,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 15),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -640,8 +704,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                         },
                       ),
                       titlesData: FlTitlesData(
-                        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                         leftTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
@@ -700,7 +764,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ),
                           belowBarData: BarAreaData(
                             show: true,
-                            color: const Color(0xFF1a73e8).withValues(alpha: 26),
+                            color: const Color(0xFF1a73e8).withValues(alpha: 0.1),
                           ),
                         ),
                       ],
@@ -729,7 +793,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 15),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -756,8 +820,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                       maxY: (totalJobs + 10).toDouble(),
                       barGroups: departmentData,
                       titlesData: FlTitlesData(
-                        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                         leftTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
@@ -846,7 +910,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       width: 60,
                       height: 60,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 51),
+                        color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                         image: employerData?['profilePicture']?.isNotEmpty == true
                             ? DecorationImage(
@@ -855,7 +919,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                               )
                             : null,
                       ),
-                      child: employerData?['profilePicture']?.isEmpty != false
+                      child: employerData?['profilePicture']?.isEmpty ?? true
                           ? const Icon(Icons.person, color: Colors.white, size: 30)
                           : null,
                     ),
@@ -871,7 +935,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     Text(
                       employerData?['email'] ?? '',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 204),
+                        color: Colors.white.withValues(alpha: 0.8),
                         fontSize: 14,
                       ),
                     ),
@@ -879,7 +943,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     Text(
                       'Employer Dashboard',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 179),
+                        color: Colors.white.withValues(alpha: 0.7),
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
@@ -969,7 +1033,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFF1a73e8).withValues(alpha: 26) : Colors.transparent,
+        color: isSelected ? const Color(0xFF1a73e8).withValues(alpha: 0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: ListTile(
@@ -977,7 +1041,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: isSelected 
-                ? const Color(0xFF1a73e8).withValues(alpha: 51)
+                ? const Color(0xFF1a73e8).withValues(alpha: 0.2)
                 : Colors.grey.shade100,
             shape: BoxShape.circle,
           ),
@@ -1068,7 +1132,7 @@ class _DashboardCardState extends State<_DashboardCard>
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 15),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -1085,7 +1149,7 @@ class _DashboardCardState extends State<_DashboardCard>
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: widget.color.withValues(alpha: 26),
+                        color: widget.color.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -1094,7 +1158,7 @@ class _DashboardCardState extends State<_DashboardCard>
                         size: 24,
                       ),
                     ),
-                    Icon(
+                    const Icon(
                       Icons.trending_up,
                       color: Colors.green,
                       size: 16,
@@ -1156,15 +1220,15 @@ class _ActionButtonState extends State<_ActionButton> {
       onTap: widget.onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        transform: Matrix4.identity()..scaleByVector3(vm.Vector3.all(_isPressed ? 0.95 : 1.0)),
+        transform: Matrix4.identity()..scaleByVector3(Vector3.all(_isPressed ? 0.95 : 1.0)),
         decoration: BoxDecoration(
           color: _isPressed 
-              ? const Color(0xFF1a73e8).withValues(alpha: 26)
+              ? const Color(0xFF1a73e8).withValues(alpha: 0.1)
               : Colors.grey[50],
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: _isPressed 
-                ? const Color(0xFF1a73e8).withValues(alpha: 77)
+                ? const Color(0xFF1a73e8).withValues(alpha: 0.3)
                 : Colors.grey.shade200,
           ),
         ),
@@ -1176,7 +1240,7 @@ class _ActionButtonState extends State<_ActionButton> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1a73e8).withValues(alpha: 26),
+                  color: const Color(0xFF1a73e8).withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -1226,7 +1290,7 @@ class _ActivityItem extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: _getStatusColor(status).withValues(alpha: 26),
+              color: _getStatusColor(status).withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -1254,7 +1318,7 @@ class _ActivityItem extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: _getStatusColor(status).withValues(alpha: 26),
+                        color: _getStatusColor(status).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
