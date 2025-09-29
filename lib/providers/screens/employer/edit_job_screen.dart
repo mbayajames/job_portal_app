@@ -57,8 +57,16 @@ class _EditJobScreenState extends State<EditJobScreen> with TickerProviderStateM
     _requirementsController = TextEditingController(text: job.requirements.join('\n'));
     _benefitsController = TextEditingController(text: job.benefits.join('\n'));
     
-    _selectedJobType = job.employmentType.isNotEmpty ? job.employmentType : 'Full-time';
-    _selectedExperience = job.experienceLevel.isNotEmpty ? job.experienceLevel : 'Mid-level';
+    // Validate and set job type - use default if not in list
+    _selectedJobType = _jobTypes.contains(job.employmentType) 
+        ? job.employmentType 
+        : 'Full-time';
+    
+    // Validate and set experience level - use default if not in list
+    _selectedExperience = _experienceLevels.contains(job.experienceLevel) 
+        ? job.experienceLevel 
+        : 'Mid-level';
+    
     _isRemote = job.isRemote;
 
     _animationController.forward();
@@ -235,7 +243,7 @@ class _EditJobScreenState extends State<EditJobScreen> with TickerProviderStateM
 
                       // Job Type Dropdown
                       _buildDropdownField(
-                        initialValue: _selectedJobType,
+                        value: _selectedJobType,
                         items: _jobTypes,
                         label: 'Employment Type',
                         icon: Icons.schedule_outlined,
@@ -244,7 +252,7 @@ class _EditJobScreenState extends State<EditJobScreen> with TickerProviderStateM
 
                       // Experience Level Dropdown
                       _buildDropdownField(
-                        initialValue: _selectedExperience,
+                        value: _selectedExperience,
                         items: _experienceLevels,
                         label: 'Experience Level',
                         icon: Icons.trending_up_outlined,
@@ -459,7 +467,7 @@ class _EditJobScreenState extends State<EditJobScreen> with TickerProviderStateM
   }
 
   Widget _buildDropdownField({
-    required String initialValue,
+    required String value,
     required List<String> items,
     required String label,
     required IconData icon,
@@ -468,7 +476,7 @@ class _EditJobScreenState extends State<EditJobScreen> with TickerProviderStateM
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: DropdownButtonFormField<String>(
-        initialValue: initialValue,
+        initialValue: value,
         items: items.map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
         onChanged: onChanged,
         decoration: InputDecoration(
