@@ -4,6 +4,7 @@ class SavedJob {
   final String userId;
   final DateTime savedAt;
   final Job jobDetails;
+  final String? notes;
 
   SavedJob({
     required this.id,
@@ -11,6 +12,7 @@ class SavedJob {
     required this.userId,
     required this.savedAt,
     required this.jobDetails,
+    this.notes,
   });
 
   factory SavedJob.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,7 @@ class SavedJob {
       userId: json['userId'],
       savedAt: DateTime.parse(json['savedAt']),
       jobDetails: Job.fromJson(json['jobDetails']),
+      notes: json['notes'],
     );
   }
 
@@ -30,6 +33,7 @@ class SavedJob {
       'userId': userId,
       'savedAt': savedAt.toIso8601String(),
       'jobDetails': jobDetails.toJson(),
+      'notes': notes,
     };
   }
 }
@@ -48,6 +52,8 @@ class Job {
   final DateTime postedDate;
   final String experienceLevel;
   final String industry;
+  final String? companyLogo;
+  final bool isRemote;
 
   Job({
     required this.id,
@@ -62,6 +68,8 @@ class Job {
     required this.postedDate,
     required this.experienceLevel,
     required this.industry,
+    this.companyLogo,
+    this.isRemote = false,
   });
 
   factory Job.fromJson(Map<String, dynamic> json) {
@@ -78,6 +86,8 @@ class Job {
       postedDate: DateTime.parse(json['postedDate']),
       experienceLevel: json['experienceLevel'],
       industry: json['industry'],
+      companyLogo: json['companyLogo'],
+      isRemote: json['isRemote'] ?? false,
     );
   }
 
@@ -95,6 +105,8 @@ class Job {
       'postedDate': postedDate.toIso8601String(),
       'experienceLevel': experienceLevel,
       'industry': industry,
+      'companyLogo': companyLogo,
+      'isRemote': isRemote,
     };
   }
 
@@ -112,6 +124,8 @@ class Job {
     DateTime? postedDate,
     String? experienceLevel,
     String? industry,
+    String? companyLogo,
+    bool? isRemote,
   }) {
     return Job(
       id: id ?? this.id,
@@ -126,6 +140,8 @@ class Job {
       postedDate: postedDate ?? this.postedDate,
       experienceLevel: experienceLevel ?? this.experienceLevel,
       industry: industry ?? this.industry,
+      companyLogo: companyLogo ?? this.companyLogo,
+      isRemote: isRemote ?? this.isRemote,
     );
   }
 
@@ -146,6 +162,8 @@ class Job {
           : postedDate,
       experienceLevel: updates['experienceLevel'] ?? experienceLevel,
       industry: updates['industry'] ?? industry,
+      companyLogo: updates['companyLogo'] ?? companyLogo,
+      isRemote: updates['isRemote'] ?? isRemote,
     );
   }
 }
