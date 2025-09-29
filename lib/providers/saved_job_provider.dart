@@ -54,6 +54,8 @@ class SavedJobProvider with ChangeNotifier {
         postedDate: jobModel.createdAt,
         experienceLevel: jobModel.experienceLevel,
         industry: jobModel.industry,
+        companyLogo: null,
+        isRemote: jobModel.isRemote,
       );
       final savedJob = SavedJob(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -61,6 +63,7 @@ class SavedJobProvider with ChangeNotifier {
         userId: user.uid,
         savedAt: DateTime.now(),
         jobDetails: job,
+        notes: null,
       );
       await _apiService.saveJob(jobId);
       _savedJobs.add(savedJob);
