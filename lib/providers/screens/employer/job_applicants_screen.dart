@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../providers/job_provider.dart';
 
 class JobApplicantsScreen extends StatefulWidget {
@@ -130,6 +131,29 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen>
         return Icons.schedule;
       default:
         return Icons.help;
+    }
+  }
+
+  String _formatApplicationDate(dynamic dateValue) {
+    try {
+      if (dateValue == null) return 'Date not available';
+      
+      DateTime date;
+      if (dateValue is Timestamp) {
+        // Convert Firestore Timestamp to DateTime
+        date = dateValue.toDate();
+      } else if (dateValue is String) {
+        // Parse string date
+        date = DateTime.parse(dateValue);
+      } else if (dateValue is DateTime) {
+        date = dateValue;
+      } else {
+        return 'Date not available';
+      }
+      
+      return DateFormat.yMMMd().format(date);
+    } catch (e) {
+      return 'Date not available';
     }
   }
 
@@ -354,9 +378,7 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen>
 
   Widget _buildApplicationCard(Map<String, dynamic> app) {
     final status = app['status'] ?? 'Applied';
-    final appliedDate = app['appliedAt'] != null
-        ? DateFormat.yMMMd().format(DateTime.parse(app['appliedAt'].toString()))
-        : 'Date not available';
+    final appliedDate = _formatApplicationDate(app['appliedAt']);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
