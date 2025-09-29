@@ -18,6 +18,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   bool _emailNotifications = true;
   bool _pushNotifications = true;
 
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _currentPasswordController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
@@ -59,6 +60,14 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       return;
     }
 
+    // Verify email matches current user's email
+    final currentUserEmail = _auth.currentUser!.email;
+    if (_emailController.text.trim() != currentUserEmail) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Email does not match your account')));
+      return;
+    }
+
     setState(() => _isUpdating = true);
 
     try {
@@ -71,6 +80,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Password updated successfully')));
+        _emailController.clear();
         _currentPasswordController.clear();
         _newPasswordController.clear();
         _confirmPasswordController.clear();
@@ -132,6 +142,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
 
   @override
   void dispose() {
+    _emailController.dispose();
     _currentPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
@@ -157,6 +168,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
               key: _formKey,
               child: Column(
                 children: [
+                  _buildEmailField(),
+                  const SizedBox(height: 12),
                   _buildPasswordField(_currentPasswordController, 'Current Password'),
                   const SizedBox(height: 12),
                   _buildPasswordField(_newPasswordController, 'New Password'),
@@ -228,6 +241,26 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildEmailField() {
+    return TextFormField(
+      controller: _emailController,
+      keyboardType: TextInputType.emailAddress,
+      decoration: InputDecoration(
+        labelText: 'Email (for verification)',
+        hintText: 'Enter your account email',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: Colors.grey[200],
+        prefixIcon: const Icon(Icons.email),
+      ),
+      validator: (val) {
+        if (val == null || val.isEmpty) return 'Email is required';
+        if (!val.contains('@')) return 'Please enter a valid email';
+        return null;
+      },
     );
   }
 
