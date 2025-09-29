@@ -81,6 +81,7 @@ class JobProvider with ChangeNotifier {
         return {
           'id': data['jobId'] ?? '',
           'status': data['status'] ?? 'Applied',
+          'appliedDate': data['appliedAt'],
         };
       }).toList();
       notifyListeners();
