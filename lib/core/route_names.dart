@@ -4,10 +4,10 @@ class RouteNames {
   // ================= INITIAL & AUTH ROUTES =================
   static const String splash = '/';
   static const String onboarding = '/onboarding';
-  
+
   // Authentication
-  static const String login = '/login';
-  static const String register = '/register';
+  static const String login = '/auth/login';
+  static const String register = '/auth/register';
   static const String forgotPassword = '/auth/forgot-password';
   static const String resetPassword = '/auth/reset-password';
   static const String verifyEmail = '/auth/verify-email';
@@ -22,7 +22,7 @@ class RouteNames {
   static const String jobs = '/seeker/jobs/browse'; // Alias for compatibility
   static const String jobDetails = '/seeker/jobs/details';
   static const String jobPreview = '/seeker/jobs/preview';
-  
+
   // Applications
   static const String applications = '/seeker/applications';
   static const String myApplications = '/seeker/applications'; // Alias
@@ -30,26 +30,26 @@ class RouteNames {
   static const String applicationDetails = '/seeker/application/details';
   static const String applicationForm = '/seeker/application/form';
   static const String applicationPreview = '/seeker/applications/preview';
-  
+
   // Saved Jobs
   static const String savedJobs = '/seeker/saved-jobs';
   static const String jobActivity = '/seeker/jobs/activity';
-  
+
   // Profile & Settings
   static const String profile = '/seeker/profile';
   static const String editProfile = '/seeker/profile/edit';
   static const String uploadResume = '/seeker/profile/upload-resume';
   static const String preview = '/seeker/profile/preview';
-  
+
   // Account Management
   static const String accountSettings = '/seeker/settings';
   static const String notifications = '/seeker/notifications';
   static const String privacySettings = '/seeker/settings/privacy';
-  
+
   // Interviews
   static const String interviews = '/seeker/interviews';
   static const String interviewDetails = '/seeker/interviews/details';
-  
+
   // Support
   static const String supportHelp = '/seeker/support';
   static const String about = '/seeker/about';
@@ -59,7 +59,7 @@ class RouteNames {
   // Main Tabs & Dashboard
   static const String dashboard = '/employer/dashboard';
   static const String employerDashboard = '/employer/dashboard'; // alias
-  
+
   // Job Management
   static const String postJob = '/employer/post-job';
   static const String editJob = '/employer/jobs/edit';
@@ -67,21 +67,21 @@ class RouteNames {
   static const String employeeJobs = '/employer/jobs/employee-jobs'; // alias
   static const String jobApplicants = '/employer/jobs/applicants';
   static const String jobAnalytics = '/employer/jobs/analytics';
-  
+
   // Applicant Management
   static const String applicants = '/employer/applicants';
   static const String applicantDetails = '/employer/applicants/details';
   static const String applicantProfile = '/employer/applicants/profile';
-  
+
   // Company & Profile
   static const String employerProfile = '/employer/profile';
   static const String companyProfile = '/employer/profile/company';
   static const String editCompanyProfile = '/employer/profile/company/edit';
-  
+
   // Employer Settings
   static const String employerAccountSettings = '/employer/settings/account';
   static const String employerNotifications = '/employer/notifications';
-  
+
   // Employer Support
   static const String employerSupportHelp = '/employer/support';
   static const String employerAnalytics = '/employer/analytics';
@@ -131,10 +131,14 @@ class RouteNames {
 /// Route Helper Methods
 class RouteHelper {
   /// Generate route with parameters
-  static String jobDetailsWithId(String jobId) => '${RouteNames.jobDetails}?id=$jobId';
-  static String applicationDetailsWithId(String applicationId) => '${RouteNames.applicationDetails}?id=$applicationId';
-  static String applicantDetailsWithId(String applicantId) => '${RouteNames.applicantDetails}?id=$applicantId';
-  static String editJobWithId(String jobId) => '${RouteNames.editJob}?id=$jobId';
+  static String jobDetailsWithId(String jobId) =>
+      '${RouteNames.jobDetails}?id=$jobId';
+  static String applicationDetailsWithId(String applicationId) =>
+      '${RouteNames.applicationDetails}?id=$applicationId';
+  static String applicantDetailsWithId(String applicantId) =>
+      '${RouteNames.applicantDetails}?id=$applicantId';
+  static String editJobWithId(String jobId) =>
+      '${RouteNames.editJob}?id=$jobId';
 
   /// Extract parameters from route
   static String? getParameter(String route, String paramName) {
@@ -151,7 +155,8 @@ class RouteHelper {
       route == RouteNames.register;
 
   /// Get base route without parameters
-  static String getBaseRoute(String fullRoute) => Uri.parse(fullRoute).path;
+  static String getBaseRoute(String fullRoute) =>
+      Uri.parse(fullRoute).path;
 }
 
 /// Route Transition Names
