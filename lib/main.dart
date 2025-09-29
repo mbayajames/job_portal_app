@@ -1,4 +1,3 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -25,13 +24,14 @@ import 'services/auth_service.dart';
 // 🔹 Auth Screens
 import 'providers/screens/auth/login_screen.dart';
 import 'providers/screens/auth/register_screen.dart';
+import 'providers/screens/auth/forgot_password.dart'; // ✅ Added
 
 // 🔹 Seeker Screens
 import 'page/seeker/seeker_home_screen.dart';
 import 'page/seeker/profile_screen.dart';
 import 'page/seeker/account_settings_screen.dart';
 import 'page/seeker/saved_jobs_screen.dart';
-import 'page/seeker/applications_screen.dart'; // ✅ Updated
+import 'page/seeker/applications_screen.dart';
 import 'page/seeker/application_details_screen.dart';
 import 'page/seeker/job_details_screen.dart';
 import 'page/seeker/interviews_screen.dart';
@@ -79,7 +79,6 @@ class JobPortalApp extends StatelessWidget {
 
     return MultiProvider(
       providers: [
-        // 🔹 Core Providers
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => JobProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
@@ -90,8 +89,6 @@ class JobPortalApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ApplicationProvider()),
         ChangeNotifierProvider(create: (_) => PaymentProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
-
-        // 🔹 Service Provider
         ChangeNotifierProvider(create: (_) => authService),
       ],
       child: MaterialApp(
@@ -133,13 +130,15 @@ class JobPortalApp extends StatelessWidget {
           // ✅ Auth
           RouteNames.login: (context) => const LoginScreen(),
           RouteNames.register: (context) => const RegisterScreen(),
+          RouteNames.forgotPassword: (context) =>
+              const ForgotPasswordScreen(), // ✅ Added
 
           // ✅ Seeker
           RouteNames.seekerHome: (context) => const SeekerHomeScreen(),
           RouteNames.profile: (context) => const ProfileScreen(),
           RouteNames.accountSettings: (context) => const AccountSettingsScreen(),
           RouteNames.savedJobs: (context) => const SavedJobsScreen(),
-          RouteNames.applications: (context) => const ApplicationsScreen(), // ✅ Updated
+          RouteNames.applications: (context) => const ApplicationsScreen(),
           RouteNames.applicationDetails: (context) =>
               const ApplicationDetailsScreen(),
 
