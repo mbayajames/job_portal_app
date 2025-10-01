@@ -1,9 +1,10 @@
+// providers/screens/employer/payment_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
-import '../../../models/payment_model.dart';
-import '../../../providers/payment_provider.dart';
+import 'package:job_portal_app/providers/%20%60.dart';
+import 'package:job_portal_app/models/payment_model.dart';
 
 class PaymentScreen extends StatefulWidget {
   final Map<String, dynamic> jobData;
@@ -28,7 +29,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void initState() {
     super.initState();
     _loadUserPhoneNumber();
-    // Reset payment state to avoid conflicts from previous attempts
     Provider.of<PaymentProvider>(context, listen: false).resetPaymentState();
   }
 
@@ -49,13 +49,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
-  // Phone number validation (adapted from MpesaService logic)
   bool _isValidKenyanPhoneNumber(String phoneNumber) {
     final cleaned = phoneNumber.replaceAll(RegExp(r'[^0-9+]'), '');
     return RegExp(r'^(?:\+254|0)7\d{8}$').hasMatch(cleaned);
   }
 
-  // Format phone number for display (e.g., +254 7XX XXX XXX)
   String _formatPhoneNumberForDisplay(String phoneNumber) {
     final cleaned = phoneNumber.replaceAll(RegExp(r'[^0-9+]'), '');
     if (cleaned.startsWith('0')) {
@@ -64,7 +62,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return cleaned;
   }
 
-  // Format phone number for M-Pesa (e.g., +2547XXXXXXXX)
   String _formatPhoneNumberForMpesa(String phoneNumber) {
     final cleaned = phoneNumber.replaceAll(RegExp(r'[^0-9+]'), '');
     if (cleaned.startsWith('0')) {
@@ -78,8 +75,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     final paymentProvider = Provider.of<PaymentProvider>(context, listen: false);
     final user = FirebaseAuth.instance.currentUser!;
-    
-    const int amount = 100; // Fixed fee for job posting
+
+    const int amount = 100;
     final String accountReference = 'JobPost_${DateTime.now().millisecondsSinceEpoch}';
     final String transactionDesc = 'Payment for job posting: ${widget.jobData['title']}';
     final String formattedPhone = _formatPhoneNumberForMpesa(_phoneController.text);
@@ -93,11 +90,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
 
     if (success && paymentProvider.paymentCompleted) {
-      // Store payment in Firestore
-      await _storePayment(user.uid, paymentProvider, amount, formattedPhone, accountReference, transactionDesc);
-      widget.onPaymentSuccess(); // Trigger job posting
+      await _storePayment(
+        user.uid,
+        paymentProvider,
+        amount,
+        formattedPhone,
+        accountReference,
+        transactionDesc,
+      );
       if (!mounted) return;
-      Navigator.pop(context); // Return to PostJobScreen
+      widget.onPaymentSuccess();
+      Navigator.pop(context);
     }
   }
 
@@ -121,9 +124,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
         subscriptionStatus: null,
         subscriptionStartDate: null,
         subscriptionExpiryDate: null,
-        mpesaReceiptNumber: null, // Updated by PaymentProvider if available
-        merchantRequestId: null, // Updated by PaymentProvider if available
-        resultCode: 0, // Success
+        mpesaReceiptNumber: paymentProvider.mpesaReceiptNumber,
+        merchantRequestId: paymentProvider.merchantRequestId,
+        resultCode: paymentProvider.resultCode ?? 0,
       );
 
       await FirebaseFirestore.instance
@@ -150,10 +153,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
     final paymentProvider = Provider.of<PaymentProvider>(context);
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Payment for Job Posting'),
-        backgroundColor: Colors.blue[700],
+        backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -188,7 +191,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: Colors.blue[700],
+                      color: Theme.of(context).primaryColor,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -202,7 +205,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ),
                       filled: true,
                       fillColor: Colors.grey[200],
-                      prefixIcon: Icon(Icons.phone, color: Colors.blue[700]),
+                      prefixIcon: Icon(Icons.phone, color: Theme.of(context).primaryColor),
                     ),
                     keyboardType: TextInputType.phone,
                     validator: (value) {
@@ -240,7 +243,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        backgroundColor: Colors.blue[700],
+                        backgroundColor: Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,
                       ),
                       child: paymentProvider.isProcessing
