@@ -356,39 +356,136 @@ class JobProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final applicationsSnapshot = await _firestore
+      _logger.fine('🔍 Fetching applications for job: $jobId');
+
+      QuerySnapshot applicationsSnapshot;
+
+      // First, try to get applications without ordering
+      applicationsSnapshot = await _firestore
           .collection('applications')
           .where('jobId', isEqualTo: jobId)
-          .orderBy('appliedAt', descending: true)
           .get();
 
+      _logger.fine('📊 Found ${applicationsSnapshot.docs.length} applications (no ordering)');
+
+      if (applicationsSnapshot.docs.isEmpty) {
+        _logger.warning('⚠️ No applications found for jobId: $jobId');
+        _jobApplications = [];
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // Check what date field exists
+      final firstDoc = applicationsSnapshot.docs.first.data() as Map<String, dynamic>;
+      final hasAppliedAt = firstDoc.containsKey('appliedAt');
+      final hasAppliedDate = firstDoc.containsKey('appliedDate');
+
+      _logger.fine('📝 Date field check: hasAppliedAt=$hasAppliedAt, hasAppliedDate=$hasAppliedDate');
+
+      if (hasAppliedAt) {
+        try {
+          applicationsSnapshot = await _firestore
+              .collection('applications')
+              .where('jobId', isEqualTo: jobId)
+              .orderBy('appliedAt', descending: true)
+              .get();
+          _logger.fine('✅ Successfully ordered by appliedAt');
+        } catch (e) {
+          _logger.warning('⚠️ Could not order by appliedAt, using unordered results: $e');
+        }
+      } else if (hasAppliedDate) {
+        try {
+          applicationsSnapshot = await _firestore
+              .collection('applications')
+              .where('jobId', isEqualTo: jobId)
+              .orderBy('appliedDate', descending: true)
+              .get();
+          _logger.fine('✅ Successfully ordered by appliedDate');
+        } catch (e) {
+          _logger.warning('⚠️ Could not order by appliedDate, using unordered results: $e');
+        }
+      }
+
       final applications = await Future.wait(applicationsSnapshot.docs.map((doc) async {
-        final appData = doc.data();
-        final applicantId = appData['applicantId'] as String;
+        try {
+          final appData = doc.data() as Map<String, dynamic>;
+          final applicantId = appData['applicantId'] as String;
 
-        // Fetch applicant details
-        final userDoc = await _firestore.collection('users').doc(applicantId).get();
-        final userData = userDoc.exists ? userDoc.data() as Map<String, dynamic> : {};
+          _logger.fine('👤 Processing application for applicant: $applicantId');
 
-        return {
-          'id': doc.id,
-          'jobId': appData['jobId'],
-          'applicantId': applicantId,
-          'applicantName': userData['name'] ?? userData['displayName'] ?? 'Unknown Applicant',
-          'applicantEmail': userData['email'] ?? '',
-          'applicantPhone': userData['phone'] ?? '',
-          'status': appData['status'] ?? 'Applied',
-          'appliedAt': appData['appliedAt'],
-          'reviewedAt': appData['reviewedAt'],
-          'notes': appData['notes'],
-          ...appData,
-        };
+          DocumentSnapshot userDoc;
+          Map<String, dynamic> userData = {};
+
+          try {
+            userDoc = await _firestore.collection('users').doc(applicantId).get();
+            if (userDoc.exists) {
+              userData = userDoc.data() as Map<String, dynamic>;
+              _logger.fine('✅ Found user data for: $applicantId');
+            } else {
+              _logger.warning('⚠️ User document not found for: $applicantId');
+            }
+          } catch (e) {
+            _logger.warning('⚠️ Error fetching user data for $applicantId: $e');
+          }
+
+          return {
+            'id': doc.id,
+            'jobId': appData['jobId'] ?? jobId,
+            'applicantId': applicantId,
+            'applicantName': userData['fullName'] ?? userData['name'] ?? userData['displayName'] ?? 'Unknown Applicant',
+            'applicantEmail': userData['email'] ?? '',
+            'applicantPhone': userData['phoneNumber'] ?? userData['phone'] ?? '',
+            'applicantPhoto': userData['profilePicture'] ?? userData['photoURL'],
+            'status': appData['status'] ?? 'Applied',
+            'appliedAt': appData['appliedAt'] ?? appData['appliedDate'],
+            'reviewedAt': appData['reviewedAt'],
+            'notes': appData['notes'],
+            'coverLetter': appData['coverLetter'],
+            'resume': appData['resume'],
+            'resumeUrl': appData['resumeUrl'],
+            ...appData,
+          };
+        } catch (e) {
+          _logger.severe('❌ Error processing application ${doc.id}: $e');
+          final appData = doc.data() as Map<String, dynamic>;
+          return {
+            'id': doc.id,
+            'jobId': appData['jobId'] ?? jobId,
+            'applicantId': appData['applicantId'] ?? 'Unknown',
+            'applicantName': 'Error Loading Applicant',
+            'status': appData['status'] ?? 'Applied',
+            'appliedAt': appData['appliedAt'] ?? appData['appliedDate'],
+            ...appData,
+          };
+        }
       }).toList());
+
+      // Sort by appliedAt in memory
+      applications.sort((a, b) {
+        final aDate = a['appliedAt'];
+        final bDate = b['appliedAt'];
+
+        if (aDate == null && bDate == null) return 0;
+        if (aDate == null) return 1;
+        if (bDate == null) return -1;
+
+        if (aDate is Timestamp && bDate is Timestamp) {
+          return bDate.compareTo(aDate);
+        }
+
+        if (aDate is DateTime && bDate is DateTime) {
+          return bDate.compareTo(aDate);
+        }
+
+        return 0;
+      });
 
       _jobApplications = applications;
       _isLoading = false;
       notifyListeners();
-      _logger.fine('Fetched ${applications.length} applications for job $jobId');
+
+      _logger.fine('✅ Successfully loaded ${applications.length} applications for job $jobId');
     } catch (e) {
       _handleError('Error fetching applications for job', e);
     }
@@ -418,7 +515,6 @@ class JobProvider with ChangeNotifier {
 
       await _firestore.collection('applications').doc(applicationId).update(updateData);
 
-      // Update local list
       final index = _jobApplications.indexWhere((app) => app['id'] == applicationId);
       if (index != -1) {
         _jobApplications[index] = {
