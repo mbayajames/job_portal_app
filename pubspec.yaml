@@ -36,6 +36,7 @@ dependencies:
 
   # File & Media
   path: ^1.9.1
+  cloudinary_public: ^0.21.0
   file_picker: ^10.3.3
   image_picker: ^1.2.0
 
@@ -45,6 +46,7 @@ dependencies:
   terminal_color_parser: ^0.8.0
   logging: ^1.2.0
   http: ^1.2.1
+  crypto: ^3.0.0
   shared_preferences: ^2.2.3
   fl_chart: ^0.70.0
   vector_math: ^2.1.4
