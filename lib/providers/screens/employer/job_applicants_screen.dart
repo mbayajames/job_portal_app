@@ -31,6 +31,9 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     
+    // Debug: Print the jobId
+    print('📋 JobApplicantsScreen initialized with jobId: ${widget.jobId}');
+    
     _loadApplications();
     _animationController.forward();
   }
@@ -42,8 +45,81 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen>
   }
 
   void _loadApplications() {
+    print('🔄 Loading applications for job: ${widget.jobId}');
     _applicationsFuture = Provider.of<JobProvider>(context, listen: false)
         .fetchApplications(widget.jobId);
+    
+    // Debug: Check what's returned
+    _applicationsFuture.then((apps) {
+      print('✅ Successfully loaded ${apps.length} applications');
+      if (apps.isEmpty) {
+        print('⚠️ No applications found for this job');
+        _debugCheckFirestore();
+      } else {
+        print('📄 Applications:');
+        for (var app in apps) {
+          print('  - ${app['applicantName']} (${app['status']}) - Applied: ${app['appliedAt']}');
+        }
+      }
+    }).catchError((error) {
+      print('❌ Error loading applications: $error');
+    });
+  }
+
+  // Debug method to check Firestore directly
+  Future<void> _debugCheckFirestore() async {
+    try {
+      print('🔍 Checking Firestore directly for jobId: ${widget.jobId}');
+      
+      final snapshot = await FirebaseFirestore.instance
+          .collection('applications')
+          .where('jobId', isEqualTo: widget.jobId)
+          .get();
+      
+      print('📊 Direct Firestore query found ${snapshot.docs.length} documents');
+      
+      if (snapshot.docs.isEmpty) {
+        print('⚠️ No application documents found in Firestore for this job');
+        print('💡 Possible issues:');
+        print('   1. Applications may not be created correctly');
+        print('   2. JobId mismatch between job and application documents');
+        print('   3. Firestore rules blocking read access');
+        
+        // Check if there are ANY applications in the collection
+        final allApps = await FirebaseFirestore.instance
+            .collection('applications')
+            .limit(5)
+            .get();
+        
+        if (allApps.docs.isNotEmpty) {
+          print('\n📋 Sample applications in database (to check structure):');
+          for (var doc in allApps.docs) {
+            print('  Doc ID: ${doc.id}');
+            print('  JobId: ${doc.data()['jobId']}');
+            print('  Has appliedAt: ${doc.data().containsKey('appliedAt')}');
+            print('  Has appliedDate: ${doc.data().containsKey('appliedDate')}');
+            print('  Data: ${doc.data()}');
+            print('  ---');
+          }
+        }
+      } else {
+        print('📄 Raw application documents:');
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+          print('  Doc ID: ${doc.id}');
+          print('  ApplicantId: ${data['applicantId']}');
+          print('  Status: ${data['status']}');
+          print('  Has appliedAt: ${data.containsKey('appliedAt')}');
+          print('  Has appliedDate: ${data.containsKey('appliedDate')}');
+          print('  appliedAt value: ${data['appliedAt']}');
+          print('  Full Data: $data');
+          print('  ---');
+        }
+      }
+    } catch (e) {
+      print('❌ Error checking Firestore: $e');
+      print('Stack trace: ${StackTrace.current}');
+    }
   }
 
   Future<void> _updateApplicationStatus(String applicationId, String newStatus) async {
@@ -58,7 +134,7 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen>
 
       _showSuccessSnackBar('Application status updated to $newStatus');
     } catch (e) {
-      _showErrorSnackBar('Failed to update application status');
+      _showErrorSnackBar('Failed to update application status: $e');
     }
   }
 
@@ -140,10 +216,8 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen>
       
       DateTime date;
       if (dateValue is Timestamp) {
-        // Convert Firestore Timestamp to DateTime
         date = dateValue.toDate();
       } else if (dateValue is String) {
-        // Parse string date
         date = DateTime.parse(dateValue);
       } else if (dateValue is DateTime) {
         date = dateValue;
@@ -182,6 +256,11 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen>
               });
             },
             tooltip: 'Refresh Applications',
+          ),
+          IconButton(
+            icon: const Icon(Icons.bug_report),
+            onPressed: _debugCheckFirestore,
+            tooltip: 'Debug Check',
           ),
         ],
       ),
@@ -299,10 +378,13 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen>
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Text(
-                            snapshot.error.toString(),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.grey),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 32),
+                            child: Text(
+                              snapshot.error.toString(),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.grey),
+                            ),
                           ),
                           const SizedBox(height: 24),
                           ElevatedButton.icon(
@@ -353,6 +435,16 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen>
                                 ? 'Applications will appear here when candidates apply'
                                 : 'Try selecting a different filter',
                             style: const TextStyle(color: Colors.grey),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: _debugCheckFirestore,
+                            icon: const Icon(Icons.bug_report),
+                            label: const Text('Debug Check Firestore'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange[700],
+                              foregroundColor: Colors.white,
+                            ),
                           ),
                         ],
                       ),
