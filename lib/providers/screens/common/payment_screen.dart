@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../providers/payment_provider.dart';
+import '../../ `.dart';
 
 class PaymentScreen extends StatefulWidget {
   final double amount;
