@@ -1,15 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PaymentModel {
-  final String id; // Using merchantRequestId or mpesaReceiptNumber as ID
+  final String id;
   final String phoneNumber;
   final String amount;
   final String status;
-  final String transactionDesc; // Using checkoutRequestId or description
-  final DateTime createdAt; // Using transactionDate
-  final String? subscriptionStatus; // Derived from role or premiumExpiry
-  final DateTime? subscriptionStartDate; // Derived from premiumUpdatedAt
-  final DateTime? subscriptionExpiryDate; // Using premiumExpiry
+  final String transactionDesc;
+  final DateTime createdAt;
+  final String? subscriptionStatus;
+  final DateTime? subscriptionStartDate;
+  final DateTime? subscriptionExpiryDate;
   final String? mpesaReceiptNumber;
   final String? checkoutRequestId;
   final String? merchantRequestId;
@@ -31,7 +31,6 @@ class PaymentModel {
     this.resultCode,
   });
 
-  // Convert to Firestore map
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -50,28 +49,27 @@ class PaymentModel {
     };
   }
 
-  // Read from Firestore map (from lastPayment field in users collection)
   factory PaymentModel.fromMap(Map<String, dynamic> map, {String? docId}) {
     return PaymentModel(
       id: map['merchantRequestId'] ?? map['mpesaReceiptNumber'] ?? docId ?? '',
       phoneNumber: map['phoneNumber']?.toString() ?? '',
       amount: map['amount']?.toString() ?? '0',
-      status: map['status'] ?? 'Pending',
-      transactionDesc: map['checkoutRequestId'] ?? map['transactionDesc'] ?? 'No description',
-      createdAt: map['transactionDate'] is Timestamp
-          ? (map['transactionDate'] as Timestamp).toDate()
-          : DateTime.tryParse(map['transactionDate'] ?? '') ?? DateTime.now(),
-      subscriptionStatus: map['subscriptionStatus'] ?? (map['role'] == 'premium' ? 'Active' : 'Inactive'),
-      subscriptionStartDate: map['premiumUpdatedAt'] is Timestamp
-          ? (map['premiumUpdatedAt'] as Timestamp).toDate()
-          : DateTime.tryParse(map['premiumUpdatedAt'] ?? ''),
-      subscriptionExpiryDate: map['premiumExpiry'] is Timestamp
-          ? (map['premiumExpiry'] as Timestamp).toDate()
-          : DateTime.tryParse(map['premiumExpiry'] ?? ''),
-      mpesaReceiptNumber: map['mpesaReceiptNumber'],
-      checkoutRequestId: map['checkoutRequestId'],
-      merchantRequestId: map['merchantRequestId'],
-      resultCode: map['resultCode'],
+      status: map['status']?.toString() ?? 'PENDING',
+      transactionDesc: map['transactionDesc']?.toString() ?? 'No description',
+      createdAt: map['createdAt'] is Timestamp
+          ? (map['createdAt'] as Timestamp).toDate()
+          : DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? DateTime.now(),
+      subscriptionStatus: map['subscriptionStatus']?.toString(),
+      subscriptionStartDate: map['subscriptionStartDate'] is Timestamp
+          ? (map['subscriptionStartDate'] as Timestamp).toDate()
+          : DateTime.tryParse(map['subscriptionStartDate']?.toString() ?? ''),
+      subscriptionExpiryDate: map['subscriptionExpiryDate'] is Timestamp
+          ? (map['subscriptionExpiryDate'] as Timestamp).toDate()
+          : DateTime.tryParse(map['subscriptionExpiryDate']?.toString() ?? ''),
+      mpesaReceiptNumber: map['mpesaReceiptNumber']?.toString(),
+      checkoutRequestId: map['checkoutRequestId']?.toString(),
+      merchantRequestId: map['merchantRequestId']?.toString(),
+      resultCode: int.tryParse(map['resultCode']?.toString() ?? ''),
     );
   }
 }
