@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'my_jobs_screen.dart';
 import 'post_job_screen.dart';
 import 'edit_profile_screen.dart';
 import 'dart:io';
 import '../../../services/payment_service.dart';
+import '../../../../page/seeker/cloudinary_service.dart';
 
 class EmployerProfileScreen extends StatefulWidget {
   const EmployerProfileScreen({super.key});
@@ -19,6 +19,7 @@ class EmployerProfileScreen extends StatefulWidget {
 class _EmployerProfileScreenState extends State<EmployerProfileScreen> {
   final user = FirebaseAuth.instance.currentUser!;
   final ImagePicker _imagePicker = ImagePicker();
+  final CloudinaryService _cloudinaryService = CloudinaryService();
   
   Map<String, dynamic>? employerData;
   List<Map<String, dynamic>>? transactions;
@@ -201,9 +202,9 @@ class _EmployerProfileScreenState extends State<EmployerProfileScreen> {
     try {
       final XFile? image = await _imagePicker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 300,
-        maxHeight: 300,
-        imageQuality: 60,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 80,
       );
 
       if (image != null) {
@@ -211,21 +212,42 @@ class _EmployerProfileScreenState extends State<EmployerProfileScreen> {
 
         final File imageFile = File(image.path);
         
+        // Check file size
         final int fileSize = await imageFile.length();
-        if (fileSize > 1 * 1024 * 1024) {
-          throw Exception('Image size must be less than 1MB');
+        if (fileSize > 5 * 1024 * 1024) {
+          throw Exception('Image size must be less than 5MB');
         }
 
-        final String fileName = 'profile_pictures/${user.uid}.jpg';
-        final Reference storageRef = FirebaseStorage.instance.ref().child(fileName);
-        
-        final TaskSnapshot snapshot = await storageRef.putFile(imageFile);
-        final String downloadUrl = await snapshot.ref.getDownloadURL();
+        // Delete old image from Cloudinary if exists (optional - only if you have API secret)
+        if (employerData?['profilePicture'] != null) {
+          final oldPublicId = _cloudinaryService.getPublicIdFromUrl(
+            employerData!['profilePicture']
+          );
+          if (oldPublicId != null) {
+            // Note: This requires API secret to be configured
+            await _cloudinaryService.deleteImage(oldPublicId);
+          }
+        }
 
+        // Upload to Cloudinary
+        final String? downloadUrl = await _cloudinaryService.uploadImage(
+          imageFile: imageFile,
+          folder: 'employers',
+          publicId: '${user.uid}_profile',
+        );
+
+        if (downloadUrl == null) {
+          throw Exception('Failed to upload image to Cloudinary');
+        }
+
+        // Update Firestore
         await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
-            .update({'profilePicture': downloadUrl});
+            .update({
+              'profilePicture': downloadUrl,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
 
         if (mounted) {
           setState(() {
@@ -234,17 +256,15 @@ class _EmployerProfileScreenState extends State<EmployerProfileScreen> {
           });
         }
 
-        _showSuccessSnackBar('Profile picture updated');
+        _showSuccessSnackBar('Profile picture updated successfully');
       }
     } catch (e) {
       debugPrint('Error updating profile picture: $e');
-      _showErrorSnackBar('Failed to update profile picture');
+      _showErrorSnackBar('Failed to update profile picture: ${e.toString()}');
     } finally {
       if (mounted) setState(() => isUploading = false);
     }
   }
-
-
 
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
@@ -252,7 +272,7 @@ class _EmployerProfileScreenState extends State<EmployerProfileScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red,
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -396,15 +416,70 @@ class _EmployerProfileScreenState extends State<EmployerProfileScreen> {
   }
 
   Future<void> _changePassword() async {
-    // Keep your existing implementation
+    try {
+      final email = user.email;
+      if (email == null) {
+        _showErrorSnackBar('No email associated with this account');
+        return;
+      }
+
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      _showSuccessSnackBar('Password reset email sent to $email');
+    } catch (e) {
+      debugPrint('Error sending password reset email: $e');
+      _showErrorSnackBar('Failed to send password reset email');
+    }
   }
 
   void _showSupportDialog() {
-    // Keep your existing implementation
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Support'),
+        content: const Text(
+          'For assistance, please contact our support team at:\n\n'
+          'support@jobapp.com\n'
+          '+254 700 000 000\n\n'
+          'We\'re here to help you with any issues or questions.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSubscriptionDialog() {
-    // Keep your existing implementation
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Subscription Plan'),
+        content: const Text(
+          'Current Plan: Basic Employer\n\n'
+          'Features:\n'
+          '• Post up to 5 jobs\n'
+          '• View applications\n'
+          '• Basic analytics\n\n'
+          'Upgrade to Premium for more features!',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Navigate to subscription page
+            },
+            child: const Text('Upgrade'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1227,5 +1302,5 @@ class _ErrorWidget extends StatelessWidget {
         ],
       ),
     );
-  }
+  } 
 }
