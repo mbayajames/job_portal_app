@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 import '../../models/user_model.dart';
 import '../../providers/user_provider.dart';
-import '../../services/file_upload_service.dart';
-import '../../widgets/sidebar.dart';
+import 'cloudinary_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -14,11 +15,12 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class ProfileScreenState extends State<ProfileScreen> {
-  final FileUploadService _fileUploadService = FileUploadService();
+  final CloudinaryService _cloudinaryService = CloudinaryService();
   final _formKey = GlobalKey<FormState>();
   late UserModel _currentUser;
   bool _isEditing = false;
   bool _isInitialized = false;
+  bool isUploading = false;
   
   // Controllers for adding new items
   final TextEditingController _educationDegreeController = TextEditingController();
@@ -123,64 +125,164 @@ class ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// Upload profile image to Cloudinary
   Future<void> _uploadProfileImage() async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final file = await _fileUploadService.pickImage();
-    if (file != null) {
-      await userProvider.uploadProfileImage(file.path);
-      if (mounted) {
-        if (userProvider.error == null) {
-          setState(() {
-            // Refresh the user data after successful upload
-            _currentUser = userProvider.user!;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Profile image updated successfully'),
-              backgroundColor: Colors.blue.shade700,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: ${userProvider.error}'),
-              backgroundColor: Colors.red.shade600,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+    
+    try {
+      setState(() => isUploading = true);
+      
+      // Pick image
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+
+      if (image == null) {
+        setState(() => isUploading = false);
+        return;
+      }
+
+      final File imageFile = File(image.path);
+      
+      // Check file size (max 5MB)
+      final int fileSize = await imageFile.length();
+      if (fileSize > 5 * 1024 * 1024) {
+        throw Exception('Image size must be less than 5MB');
+      }
+
+      // Delete old image if exists (optional - only if you have API secret)
+      if (_currentUser.profileImage != null && _currentUser.profileImage!.isNotEmpty) {
+        final oldPublicId = _cloudinaryService.getPublicIdFromUrl(
+          _currentUser.profileImage!
+        );
+        if (oldPublicId != null) {
+          await _cloudinaryService.deleteImage(oldPublicId);
         }
+      }
+
+      // Upload to Cloudinary
+      final String? imageUrl = await _cloudinaryService.uploadImage(
+        imageFile: imageFile,
+        folder: 'seekers',
+        publicId: '${_currentUser.id}_profile',
+      );
+
+      if (imageUrl == null) {
+        throw Exception('Failed to upload image to Cloudinary');
+      }
+
+      // Update user model and save to backend
+      _currentUser = _currentUser.copyWith(profileImage: imageUrl);
+      await userProvider.updateProfile(_currentUser);
+
+      if (mounted) {
+        setState(() => isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Profile image updated successfully'),
+            backgroundColor: Colors.blue.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error uploading profile image: $e');
+      if (mounted) {
+        setState(() => isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
 
+  /// Upload resume to Cloudinary
   Future<void> _uploadResume() async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final file = await _fileUploadService.pickDocument();
-    if (file != null) {
-      await userProvider.uploadResume(file.path);
-      if (mounted) {
-        if (userProvider.error == null) {
-          setState(() {
-            // Refresh the user data after successful upload
-            _currentUser = userProvider.user!;
-          });
+    
+    try {
+      setState(() => isUploading = true);
+      
+      // Pick document (using image picker for simplicity - you can use file_picker for better document selection)
+      final ImagePicker picker = ImagePicker();
+      final XFile? file = await picker.pickImage(source: ImageSource.gallery);
+
+      if (file == null) {
+        if (mounted) {
+          setState(() => isUploading = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Resume updated successfully'),
-              backgroundColor: Colors.blue.shade700,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: ${userProvider.error}'),
-              backgroundColor: Colors.red.shade600,
+              content: const Text('No document selected'),
+              backgroundColor: Colors.orange.shade600,
               behavior: SnackBarBehavior.floating,
             ),
           );
         }
+        return;
+      }
+
+      final File documentFile = File(file.path);
+
+      // Check file size (max 10MB)
+      final int fileSize = await documentFile.length();
+      if (fileSize > 10 * 1024 * 1024) {
+        throw Exception('Document size must be less than 10MB');
+      }
+
+      // Delete old resume if exists (optional - only if you have API secret)
+      if (_currentUser.resumeUrl != null && _currentUser.resumeUrl!.isNotEmpty) {
+        final oldPublicId = _cloudinaryService.getPublicIdFromUrl(
+          _currentUser.resumeUrl!
+        );
+        if (oldPublicId != null) {
+          await _cloudinaryService.deleteDocument(oldPublicId);
+        }
+      }
+
+      // Upload resume to Cloudinary
+      final String? resumeUrl = await _cloudinaryService.uploadDocument(
+        documentFile: documentFile,
+        folder: 'resumes',
+        publicId: '${_currentUser.id}_resume',
+      );
+
+      if (resumeUrl == null) {
+        throw Exception('Failed to upload resume to Cloudinary');
+      }
+
+      // Update user model and save to backend
+      _currentUser = _currentUser.copyWith(resumeUrl: resumeUrl);
+      await userProvider.updateProfile(_currentUser);
+
+      if (mounted) {
+        setState(() => isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Resume updated successfully'),
+            backgroundColor: Colors.blue.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error uploading resume: $e');
+      if (mounted) {
+        setState(() => isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -353,16 +455,49 @@ class ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileAvatar() {
-    return CircleAvatar(
-      radius: 60,
-      backgroundColor: Colors.grey.shade200,
-      backgroundImage: _currentUser.profileImage != null &&
-              _currentUser.profileImage!.isNotEmpty
-          ? NetworkImage(_currentUser.profileImage!)
-          : null,
-      child: _currentUser.profileImage == null || _currentUser.profileImage!.isEmpty
-          ? Icon(Icons.person, size: 50, color: Colors.grey.shade400)
-          : null,
+    return Stack(
+      children: [
+        CircleAvatar(
+          radius: 60,
+          backgroundColor: Colors.grey.shade200,
+          backgroundImage: _currentUser.profileImage != null &&
+                  _currentUser.profileImage!.isNotEmpty
+              ? NetworkImage(_currentUser.profileImage!)
+              : null,
+          child: _currentUser.profileImage == null || _currentUser.profileImage!.isEmpty
+              ? Icon(Icons.person, size: 50, color: Colors.grey.shade400)
+              : null,
+        ),
+        if (isUploading)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
+          ),
+        if (_isEditing)
+          Positioned(
+            bottom: 0,
+            right: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.blue.shade700,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                onPressed: isUploading ? null : _uploadProfileImage,
+                tooltip: 'Change Profile Photo',
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -478,7 +613,6 @@ class ProfileScreenState extends State<ProfileScreen> {
           ],
         ],
       ),
-      drawer: const Sidebar(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
@@ -488,28 +622,7 @@ class ProfileScreenState extends State<ProfileScreen> {
             children: [
               // Profile Image Section
               Center(
-                child: Stack(
-                  children: [
-                    _buildProfileAvatar(),
-                    if (_isEditing)
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade700,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                          child: IconButton(
-                            icon: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                            onPressed: _uploadProfileImage,
-                            tooltip: 'Change Profile Photo',
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                child: _buildProfileAvatar(),
               ),
               const SizedBox(height: 24),
 
@@ -611,9 +724,11 @@ class ProfileScreenState extends State<ProfileScreen> {
                         ),
                       if (_isEditing)
                         FilledButton.icon(
-                          onPressed: _uploadResume,
-                          icon: const Icon(Icons.upload),
-                          label: const Text('Upload Resume'),
+                          onPressed: isUploading ? null : _uploadResume,
+                          icon: isUploading 
+                              ? SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : const Icon(Icons.upload),
+                          label: Text(isUploading ? 'Uploading...' : 'Upload Resume'),
                           style: FilledButton.styleFrom(
                             backgroundColor: Colors.blue.shade700,
                             foregroundColor: Colors.white,
